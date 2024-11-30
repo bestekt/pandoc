@@ -63,7 +63,7 @@ import Text.Pandoc.Writers.Shared
 import Text.TeXMath
 import Text.Pandoc.Writers.OOXML
 import Text.Pandoc.XML.Light as XML
-import Data.List (sortBy, intercalate, groupBy)
+import Data.List (find, sortBy, intercalate, groupBy)
 
 -- from wml.xsd EG_RPrBase
 rPrTagOrder :: M.Map Text Int
@@ -650,8 +650,15 @@ withTextPropM md p = do
 getParaProps :: PandocMonad m => Bool -> WS m [Element]
 getParaProps displayMathPara = do
   props <- asks envParaProperties
-  listLevel <- asks envListLevel
-  numid <- asks envListNumId
+  let styleEl = styleElement props
+  preListLevel <- asks envListLevel
+  preNumid <- asks envListNumId
+  let listLevel = case styleEl of
+                    Just el -> styleListLevel (fromMaybe "IDK" . fmap attrVal . find (((==) (T.pack "val")) . XML.qName . attrKey) $ elAttribs el) preListLevel
+                    Nothing -> preListLevel
+  let numid = case styleEl of
+                Just el -> styleNumid (fromMaybe "IDK" . fmap attrVal . find (((==) (T.pack "val")) . XML.qName . attrKey) $ elAttribs el) preNumid
+                Nothing -> preNumid
   numIdUsed <- gets stNumIdUsed
   -- clear numId after first use to support multiple paragraphs in the same bullet
   -- baseListId is the code for no list marker
@@ -663,6 +670,15 @@ getParaProps displayMathPara = do
   return $ case squashProps (EnvProps Nothing listPr <> props) of
                 [] -> []
                 ps -> [mknode "w:pPr" [] ps]
+  where
+    styleListLevel "BodyTextIndent" _ = 0
+    styleListLevel "BodyTextIndent2" _ = 0
+    styleListLevel "BodyTextIndent3" _ = 1
+    styleListLevel _ v = v
+    styleNumid "BodyTextIndent" _ = 1
+    styleNumid "BodyTextIndent2" _ = 2
+    styleNumid "BodyTextIndent3" _ = 3
+    styleNumid _ v = v
 
 formattedString :: PandocMonad m => Text -> WS m [Element]
 formattedString str =
